@@ -1,0 +1,3 @@
+template-file-path: .deploy/template.yaml
+parameters: {}
+tags: {}
