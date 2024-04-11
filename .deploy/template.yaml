@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  UsersTableName:
+    Type: AWS::SSM::Parameter::Value<String>
+    NoEcho: true
+    Default: /dev/dynamodb/users/name
+  Env:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - stage
+      - prod
+Resources:
+  UsersApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: "users_api"
+      EndpointConfiguration:
+        Type: "REGIONAL"
+      StageName: !Ref Env
+  GetUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub GetUserFunction-${Env}
+      CodeUri: cmd/
+      Handler: bootstrap
+      Runtime: provided.al2
+      Timeout: 900
+      Architectures:
+        - x86_64
+      Policies:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          USERS_TABLE_NAME: !Ref UsersTableName
+      Events:
+        MyApi:
+          Type: Api
+          Properties:
+            Path: /users/{id}
+            Method: GET
+            RestApiId: !Ref UsersApi
+    Metadata:
+      BuildMethod: go1.x
+  SSMParameterSampleFunctionName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${Env}/lambda/getuser/name
+      Type: String
+      Value: !Sub GetUserFunction-${Env}
