@@ -106,7 +106,6 @@ Resources:
     Properties:
       RestApiId: !Ref APIGw
       ResourceId: !Ref UsersResource
-      AuthorizationType: "None"
       HttpMethod: "GET"
       Integration:
         Type: "AWS_PROXY"
