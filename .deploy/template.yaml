@@ -93,8 +93,6 @@ Resources:
       RestApiId: !Ref APIGw
       ParentId: !GetAtt APIGw.RootResourceId
       PathPart: "users"
-    DependsOn:
-      - APIGw
 
   LambdaPermission:
     Type: "AWS::Lambda::Permission"
@@ -102,7 +100,6 @@ Resources:
       FunctionName: !Sub GetUsersFunction-${Env}
       Action: "lambda:InvokeFunction"
       Principal: "apigateway.amazonaws.com"
-    DependsOn: Resource
 
   ResourceMethod:
     Type: "AWS::ApiGateway::Method"
@@ -117,16 +114,14 @@ Resources:
         Uri:
           Fn::Sub:
             - "arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${Region}:${AccountId}:function:${FunctionName}/invocations"
-            - Region: !Ref "AWS::Region"
-              AccountId: !Ref "AWS::AccountId"
+            - Region: !Ref AWS::Region
+              AccountId: !Ref AWS::AccountId
               FunctionName: !Sub GetUsersFunction-${Env}
-    DependsOn: LambdaPermission
 
   Deployment:
     Type: AWS::ApiGateway::Deployment
     Properties:
       RestApiId: !Ref APIGw
-    DependsOn: ResourceMethod
 
   Stage:
     Type: AWS::ApiGateway::Stage
@@ -134,7 +129,6 @@ Resources:
       StageName: !Ref Env
       RestApiId: !Ref APIGw
       DeploymentId: !Ref Deployment
-    DependsOn: Deployment
 
   SSMParameterAPIGwUri:
     Type: AWS::SSM::Parameter
@@ -144,6 +138,6 @@ Resources:
       Value:
         Fn::Sub:
           - "https://${APIGw}.execute-api.${Region}.amazonaws.com/${Env}/"
-          - Region: !Ref "AWS::Region"
+          - Region: !Ref AWS::Region
             APIGw: !Ref APIGw
             Env: !Ref Env
