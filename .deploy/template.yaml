@@ -6,6 +6,10 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<String>
     NoEcho: true
     Default: /dev/dynamodb/users/name
+  UsersTableArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    NoEcho: true
+    Default: /dev/dynamodb/users/arn
   Env:
     Type: String
     Default: dev
@@ -14,41 +18,133 @@ Parameters:
       - stage
       - prod
 Resources:
-  UsersApi:
-    Type: AWS::Serverless::Api
+  UsersFunction:
+    Type: AWS::Lambda::Function
     Properties:
-      Name: "users_api"
-      EndpointConfiguration:
-        Type: "REGIONAL"
-      StageName: !Ref Env
-  GetUserFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub GetUserFunction-${Env}
-      CodeUri: cmd/
-      Handler: bootstrap
-      Runtime: provided.al2
-      Timeout: 900
+      FunctionName: !Sub GetUsersFunction-${Env}
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Runtime: python3.10
+      Timeout: 20
       Architectures:
         - x86_64
-      Policies:
-        - arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess
+      Role: !GetAtt LambdaExecutionRole.Arn
       Environment:
         Variables:
           ENV: !Ref Env
           USERS_TABLE_NAME: !Ref UsersTableName
-      Events:
-        MyApi:
-          Type: Api
-          Properties:
-            Path: /users/{id}
-            Method: GET
-            RestApiId: !Ref UsersApi
-    Metadata:
-      BuildMethod: go1.x
-  SSMParameterSampleFunctionName:
+      Code:
+        ZipFile: |
+          import os
+          import boto3
+
+          dynamo_client = boto3.client('dynamodb')
+          table = os.getenv('USERS_TABLE_NAME')
+
+          def lambda_handler(event, context):
+              dynamo_resp = dynamo_client.scan(TableName=table)
+              # TODO DynamoDB JSONをいい感じに整形して返す
+              return {
+                  "statusCode": 200,
+                  "headers": {
+                      "Content-Type": "application/json"
+                  },
+                  "body": json.dumps(dynamo_resp['Items'])
+              }
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: arn:aws:logs:ap-northeast-1:*:*
+        - PolicyName: UsersTablePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: !Ref UsersTableArn
+
+  APIGw:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: "users-api"
+
+  UsersResource:
+    Type: "AWS::ApiGateway::Resource"
+    Properties:
+      RestApiId: !Ref APIGw
+      ParentId: !GetAtt APIGw.RootResourceId
+      PathPart: "users"
+    DependsOn:
+      - APIGw
+
+  LambdaPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Sub GetUsersFunction-${Env}
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+    DependsOn: Resource
+
+  ResourceMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      RestApiId: !Ref APIGw
+      ResourceId: !Ref UsersResource
+      AuthorizationType: "None"
+      HttpMethod: "GET"
+      Integration:
+        Type: "AWS_PROXY"
+        IntegrationHttpMethod: "POST"
+        Uri:
+          Fn::Sub:
+            - "arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${Region}:${AccountId}:function:${FunctionName}/invocations"
+            - Region: !Ref "AWS::Region"
+              AccountId: !Ref "AWS::AccountId"
+              FunctionName: !Sub GetUsersFunction-${Env}
+    DependsOn: LambdaPermission
+
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref APIGw
+    DependsOn: ResourceMethod
+
+  Stage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: !Ref Env
+      RestApiId: !Ref APIGw
+      DeploymentId: !Ref Deployment
+    DependsOn: Deployment
+
+  SSMParameterAPIGwUri:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub /${Env}/lambda/getuser/name
+      Name: !Sub /${Env}/apigw/uri
       Type: String
-      Value: !Sub GetUserFunction-${Env}
+      Value:
+        Fn::Sub:
+          - "https://${APIGw}.execute-api.${Region}.amazonaws.com/${Env}/"
+          - Region: !Ref "AWS::Region"
+            APIGw: !Ref APIGw
+            Env: !Ref Env
