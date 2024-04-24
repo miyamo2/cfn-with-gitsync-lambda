@@ -100,6 +100,7 @@ Resources:
       FunctionName: !Sub GetUsersFunction-${Env}
       Action: "lambda:InvokeFunction"
       Principal: "apigateway.amazonaws.com"
+    DependsOn: UsersFunction
 
   ResourceMethod:
     Type: "AWS::ApiGateway::Method"
