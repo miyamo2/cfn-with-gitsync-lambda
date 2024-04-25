@@ -122,6 +122,7 @@ Resources:
     Type: AWS::ApiGateway::Deployment
     Properties:
       RestApiId: !Ref APIGw
+    DependsOn: ResourceMethod
 
   Stage:
     Type: AWS::ApiGateway::Stage
@@ -129,6 +130,7 @@ Resources:
       StageName: !Ref Env
       RestApiId: !Ref APIGw
       DeploymentId: !Ref Deployment
+    DependsOn: Deployment
 
   SSMParameterAPIGwUri:
     Type: AWS::SSM::Parameter
@@ -141,3 +143,4 @@ Resources:
           - Region: !Ref AWS::Region
             APIGw: !Ref APIGw
             Env: !Ref Env
+    DependsOn: UsersFunction
