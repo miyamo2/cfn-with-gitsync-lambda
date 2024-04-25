@@ -108,6 +108,7 @@ Resources:
       RestApiId: !Ref APIGw
       ResourceId: !Ref UsersResource
       HttpMethod: "GET"
+      AuthorizationType: NONE
       Integration:
         Type: "AWS_PROXY"
         IntegrationHttpMethod: "POST"
@@ -117,6 +118,13 @@ Resources:
             - Region: !Ref AWS::Region
               AccountId: !Ref AWS::AccountId
               FunctionName: !Sub GetUsersFunction-${Env}
+        PassthroughBehavior: WHEN_NO_MATCH
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: Empty
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
 
   Deployment:
     Type: AWS::ApiGateway::Deployment
