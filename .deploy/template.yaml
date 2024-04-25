@@ -36,6 +36,7 @@ Resources:
         ZipFile: |
           import os
           import boto3
+          import json
 
           dynamo_client = boto3.client('dynamodb')
           table = os.getenv('USERS_TABLE_NAME')
